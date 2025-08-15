@@ -1,0 +1,21 @@
+# Ignore Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+# Ignore notebooks (you don't want to bundle them in production)
+*.ipynb
+# Ignore virtual environments
+env/
+venv/
+.venv/
+# Ignore system files
+.DS_Store
+Thumbs.db
+# Ignore local data files
+data/
+*.xlsx
+*.csv
+# Ignore Git files
+.git
+.gitignore
