@@ -11,8 +11,8 @@ from importlib import resources
 import os
 from pathlib import Path
 import importlib
-# --- Streamlit Page Config ---
-st.set_page_config(page_title="WWF ITR Calculator", layout="wide")
+import base64
+
 
 # --- Hero banner: text (left) and ITR-logo.png (right) ---
 banner_path = None
@@ -24,14 +24,17 @@ try:
         with resources.as_file(res) as p:
             icon_path = str(p)
 except Exception:
-    icon_path = None
+    # fallback to file relative to this module (works when running from the repo)
+    local_icon = Path(__file__).resolve().parent.joinpath("static", "panda.jpeg")
+    if local_icon.exists():
+        icon_path = str(local_icon)
 
+# single set_page_config call (must be the first Streamlit call)
 st.set_page_config(
     page_title="WWF ITR Calculator",
     page_icon=icon_path if icon_path and os.path.exists(icon_path) else "🌍",
     layout="wide"
 )
-
 # 1) Try package resources inside this UI package ("app")
 try:
     banner_res = resources.files("app").joinpath("static/ITR-logo.png")
@@ -48,14 +51,22 @@ if not banner_path:
         banner_path = str(local_path)
 
 col_text, col_img = st.columns([3, 1])
+img_html = "🌍"
+if banner_path and os.path.exists(banner_path):
+    with open(banner_path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode("ascii")
+    img_html = f'<img src="data:image/jpeg;base64,{b64}" style="height:28px; vertical-align:middle; margin-right:8px; border-radius:4px; object-fit:contain;" />'
+
 with col_text:
     st.markdown(
-        """
-        <div style="padding: 0.5rem 1rem;">
-          <h1 style="margin:0; font-size:28px;">🌍 WWF ITR Temperature Score Calculator</h1>
-          <p style="margin:0.35rem 0 0; color:#444; font-size:16px;">
-            Easily calculate portfolio temperature scores using your data provider and portfolio files.
-          </p>
+        f"""
+        <div style="padding: 0.5rem 1rem; display:flex; align-items:center;">
+          <div style="flex:1;">
+            <h1 style="margin:0; font-size:28px;">{img_html} WWF ITR Temperature Score Calculator</h1>
+            <p style="margin:0.35rem 0 0; color:#444; font-size:16px;">
+              Easily calculate portfolio temperature scores using your data provider and portfolio files.
+            </p>
+          </div>
         </div>
         """,
         unsafe_allow_html=True
