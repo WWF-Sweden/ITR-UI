@@ -7,12 +7,68 @@ from ITR.portfolio_coverage_tvp import PortfolioCoverageTVP
 from ITR.temperature_score import TemperatureScore
 from ITR.interfaces import ETimeFrames, EScope
 from io import BytesIO
-
+from importlib import resources
+import os
+from pathlib import Path
+import importlib
 # --- Streamlit Page Config ---
 st.set_page_config(page_title="WWF ITR Calculator", layout="wide")
 
-st.title("🌍 WWF ITR Temperature Score Calculator")
-st.write("Upload your **Data Provider** Excel file and **Portfolio** CSV file to calculate temperature scores.")
+# --- Hero banner: text (left) and ITR-logo.png (right) ---
+banner_path = None
+# Resolve icon (prefer bundled app/static/panda.jpg, fallback to emoji)
+icon_path = None
+try:
+    res = resources.files("app").joinpath("static/panda.jpeg")
+    if res.exists():
+        with resources.as_file(res) as p:
+            icon_path = str(p)
+except Exception:
+    icon_path = None
+
+st.set_page_config(
+    page_title="WWF ITR Calculator",
+    page_icon=icon_path if icon_path and os.path.exists(icon_path) else "🌍",
+    layout="wide"
+)
+
+# 1) Try package resources inside this UI package ("app")
+try:
+    banner_res = resources.files("app").joinpath("static/ITR-logo.png")
+    if banner_res.exists():
+        with resources.as_file(banner_res) as p:
+            banner_path = str(p)
+except Exception:
+    banner_path = None
+
+# 2) Fallback: local file path relative to this module (development)
+if not banner_path:
+    local_path = Path(__file__).resolve().parent.joinpath("static", "ITR-logo.png")
+    if local_path.exists():
+        banner_path = str(local_path)
+
+col_text, col_img = st.columns([3, 1])
+with col_text:
+    st.markdown(
+        """
+        <div style="padding: 0.5rem 1rem;">
+          <h1 style="margin:0; font-size:28px;">🌍 WWF ITR Temperature Score Calculator</h1>
+          <p style="margin:0.35rem 0 0; color:#444; font-size:16px;">
+            Easily calculate portfolio temperature scores using your data provider and portfolio files.
+          </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+with col_img:
+    if banner_path and os.path.exists(banner_path):
+        st.image(banner_path, use_container_width=True)
+    else:
+        st.empty()
+
+# st.title("🌍 WWF ITR Temperature Score Calculator")
+# st.write("Upload your **Data Provider** Excel file and **Portfolio** CSV file to calculate temperature scores.")
 
 # --- File uploads ---
 col1, col2 = st.columns(2)
