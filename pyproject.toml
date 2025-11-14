@@ -1,0 +1,25 @@
+[project]
+name = "itr-ui"
+version = "0.1.0"
+description = "This is a UI for the WWF ITR tool v 1.5"
+authors = [
+    {name = "WWF Sweden"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.12,<4.0"
+dependencies = [
+    "wwf-itr (>=1.5,<2.0.0)",
+    "streamlit (>=1.51.0,<2.0.0)"
+]
+
+[tool.poetry]
+name = "itr-ui"
+version = "0.1.0"
+description = ""
+authors = ["wwf <ekonomi-finans@wwf.se>"]
+packages = [{ include = "app" }]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

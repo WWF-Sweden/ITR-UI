@@ -1,99 +1,70 @@
+"""
+Main Streamlit UI for the ITR-UI package.
+
+Keep this file focused on layout and wiring. Heavy logic lives in app/actions.py
+and layout helpers live in app/layout.py.
+"""
+import sys
+from pathlib import Path
+# Ensure project root is on sys.path so "app" can be imported when running the script directly
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import os
+import base64
+from pathlib import Path
+from io import BytesIO
+
 import streamlit as st
 import pandas as pd
+
+from app.layout import get_icon_path, render_hero, get_local_asset
+from app.actions import run_calculation
+
+# ITR enums used for selectors
 import ITR
-from ITR.data.excel import ExcelProvider
 from ITR.portfolio_aggregation import PortfolioAggregationMethod
-from ITR.portfolio_coverage_tvp import PortfolioCoverageTVP
-from ITR.temperature_score import TemperatureScore
 from ITR.interfaces import ETimeFrames, EScope
-from io import BytesIO
-from importlib import resources
-import os
-from pathlib import Path
-import importlib
-import base64
 
 
-# --- Hero banner: text (left) and ITR-logo.png (right) ---
-banner_path = None
-# Resolve icon (prefer bundled app/static/panda.jpg, fallback to emoji)
-icon_path = None
-try:
-    res = resources.files("app").joinpath("static/panda.jpeg")
-    if res.exists():
-        with resources.as_file(res) as p:
-            icon_path = str(p)
-except Exception:
-    # fallback to file relative to this module (works when running from the repo)
-    local_icon = Path(__file__).resolve().parent.joinpath("static", "panda.jpeg")
-    if local_icon.exists():
-        icon_path = str(local_icon)
-
-# single set_page_config call (must be the first Streamlit call)
+# --- Page config (must be first Streamlit call) ---
+icon_path = get_icon_path()
 st.set_page_config(
     page_title="WWF ITR Calculator",
     page_icon=icon_path if icon_path and os.path.exists(icon_path) else "🌍",
-    layout="wide"
+    layout="wide",
 )
-# 1) Try package resources inside this UI package ("app")
-try:
-    banner_res = resources.files("app").joinpath("static/ITR-logo.png")
-    if banner_res.exists():
-        with resources.as_file(banner_res) as p:
-            banner_path = str(p)
-except Exception:
-    banner_path = None
 
-# 2) Fallback: local file path relative to this module (development)
-if not banner_path:
-    local_path = Path(__file__).resolve().parent.joinpath("static", "ITR-logo.png")
-    if local_path.exists():
-        banner_path = str(local_path)
-
-col_text, col_img = st.columns([3, 1])
-img_html = "🌍"
-if banner_path and os.path.exists(banner_path):
-    with open(banner_path, "rb") as f:
-        b64 = base64.b64encode(f.read()).decode("ascii")
-    img_html = f'<img src="data:image/jpeg;base64,{b64}" style="height:28px; vertical-align:middle; margin-right:8px; border-radius:4px; object-fit:contain;" />'
-
-with col_text:
-    st.markdown(
-        f"""
-        <div style="padding: 0.5rem 1rem; display:flex; align-items:center;">
-          <div style="flex:1;">
-            <h1 style="margin:0; font-size:28px;">{img_html} WWF ITR Temperature Score Calculator</h1>
-            <p style="margin:0.35rem 0 0; color:#444; font-size:16px;">
-              Easily calculate portfolio temperature scores using your data provider and portfolio files.
-            </p>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-with col_img:
-    if banner_path and os.path.exists(banner_path):
-        st.image(banner_path, use_container_width=True)
-    else:
-        st.empty()
-
-# st.title("🌍 WWF ITR Temperature Score Calculator")
-# st.write("Upload your **Data Provider** Excel file and **Portfolio** CSV file to calculate temperature scores.")
+# --- Hero banner ---
+banner_path = get_local_asset("app", "static/ITR-logo.png")
+render_hero(
+    title="WWF ITR Temperature Score Calculator",
+    subtitle="Easily calculate portfolio temperature scores using your data provider and portfolio files.",
+    img_path=banner_path,
+)
 
 # --- File uploads ---
 col1, col2 = st.columns(2)
 with col1:
-    provider_file = st.file_uploader("📄 Data Provider file (.xlsx)", type=["xlsx"])
+    provider_file = st.file_uploader(
+        "📄 Data Provider file (.xlsx)",
+        type=["xlsx"],
+        key="provider_uploader",
+        help="Upload the Excel file from your data provider."
+    )
 with col2:
-    portfolio_file = st.file_uploader("📄 Portfolio file (.csv)", type=["csv"])
+    portfolio_file = st.file_uploader(
+        "📄 Portfolio file (.csv)",
+        type=["csv"],
+        key="portfolio_uploader",
+        help="Upload a CSV with your portfolio (ticker/identifier + weight)."
+    )
 
-# --- Parameter selection ---
-with st.expander("⚙️ Calculation Settings"):
+# --- Calculation settings ---
+with st.expander("⚙️ Calculation Settings", expanded=False):
     agg_method = st.selectbox(
         "Aggregation Method",
         options=list(PortfolioAggregationMethod),
-        format_func=lambda x: x.name
+        format_func=lambda x: x.name,
+        index=0,
     )
     selected_scopes = st.multiselect(
         "Scopes",
@@ -108,77 +79,48 @@ with st.expander("⚙️ Calculation Settings"):
         format_func=lambda x: x.name
     )
 
-# --- Run calculation ---
-if provider_file and portfolio_file:
-    try:
-        provider = ExcelProvider(path=provider_file)
-        df_portfolio = pd.read_csv(portfolio_file, encoding="iso-8859-1")
+# --- Run control (use session_state to trigger and reset) ---
+if "run_now" not in st.session_state:
+    st.session_state.run_now = False
 
-        st.subheader("Portfolio Preview")
-        st.dataframe(df_portfolio.head())
+if st.button("Run calculation", key="run_btn"):
+    st.session_state.run_now = True
 
-        companies = ITR.utils.dataframe_to_portfolio(df_portfolio)
+if st.session_state.run_now:
+    if not (provider_file and portfolio_file):
+        st.info("Please upload both the Data Provider Excel file and Portfolio CSV file to start.")
+    else:
+        try:
+            with st.spinner("Calculating…"):
+                company_scores_df, aggregated_df, coverage, excel_bytes = run_calculation(
+                    provider_file,
+                    portfolio_file,
+                    selected_timeframes,
+                    selected_scopes,
+                    agg_method,
+                )
 
-        temperature_score = TemperatureScore(
-            time_frames=selected_timeframes,
-            scopes=selected_scopes,
-            aggregation_method=agg_method
-        )
-        amended_portfolio = temperature_score.calculate(
-            data_providers=[provider],
-            portfolio=companies
-        )
+            st.subheader("Portfolio Preview")
+            st.dataframe(company_scores_df.head())
 
-        company_scores_df = amended_portfolio[['company_name', 'time_frame', 'scope', 'temperature_score']]
+            tab1, tab2, tab3 = st.tabs(["🏢 Company Scores", "📊 Aggregated Scores", "📈 Portfolio Coverage"])
+            with tab1:
+                st.dataframe(company_scores_df)
+            with tab2:
+                st.dataframe(aggregated_df)
+            with tab3:
+                st.metric(label="Portfolio Coverage (%)", value=f"{coverage:.2f}")
 
-        aggregated_scores = temperature_score.aggregate_scores(amended_portfolio)
-        aggregated_df = pd.DataFrame(aggregated_scores.dict()).apply(
-            lambda x: x.map(
-                lambda y: round(y['all']['score'], 2) if y and y['all'] and 'score' in y['all'] else None
+            st.download_button(
+                label="📥 Download Results as Excel",
+                data=excel_bytes,
+                file_name="wwf_itr_results.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
-        )
-
-        portfolio_coverage_tvp = PortfolioCoverageTVP()
-        coverage = portfolio_coverage_tvp.get_portfolio_coverage(
-            amended_portfolio.copy(),
-            agg_method
-        )
-
-        # --- Tabs for results ---
-        tab1, tab2, tab3 = st.tabs(["🏢 Company Scores", "📊 Aggregated Scores", "📈 Portfolio Coverage"])
-
-        with tab1:
-            st.dataframe(company_scores_df)
-
-        with tab2:
-            st.dataframe(aggregated_df)
-
-        with tab3:
-            st.metric(label="Portfolio Coverage (%)", value=f"{coverage:.2f}")
-
-        # --- Download results ---
-        def to_excel_bytes(df_dict):
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                for sheet_name, df in df_dict.items():
-                    df.to_excel(writer, index=False, sheet_name=sheet_name)
-            return output.getvalue()
-
-        excel_bytes = to_excel_bytes({
-            "Company Scores": company_scores_df,
-            "Aggregated Scores": aggregated_df
-        })
-
-        st.download_button(
-            label="📥 Download Results as Excel",
-            data=excel_bytes,
-            file_name="wwf_itr_results.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
-    except Exception as e:
-        st.error(f"An error occurred: {e}")
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
+        finally:
+            # reset flag so it doesn't auto-run on the next interaction
+            st.session_state.run_now = False
 else:
-    st.info("Please upload both the Data Provider Excel file and Portfolio CSV file to start.")
-
-
+    st.info("Upload files and press 'Run calculation' to compute temperature scores.")
