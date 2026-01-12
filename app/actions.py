@@ -20,10 +20,13 @@ def run_calculation(
     selected_timeframes: list[ETimeFrames],
     selected_scopes: list[EScope],
     agg_method: PortfolioAggregationMethod,
+    return_intermediates: bool = False,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, float, bytes]:
     """
     Run the temperature score calculation and return:
     (company_scores_df, aggregated_df, coverage, excel_bytes)
+    
+    If return_intermediates=True, also returns (provider, companies, amended_portfolio)
 
     - provider_file: path-like or file-like accepted by ExcelProvider
     - portfolio_file: path-like or file-like accepted by pd.read_csv
@@ -73,4 +76,36 @@ def run_calculation(
         aggregated_df.to_excel(writer, index=False, sheet_name="Aggregated Scores")
     excel_bytes = output.getvalue()
 
+    if return_intermediates:
+        return company_scores_df, aggregated_df, coverage, excel_bytes, provider, companies, amended_portfolio
+    
     return company_scores_df, aggregated_df, coverage, excel_bytes
+
+
+def run_grouped_calculation(
+    provider,
+    companies,
+    selected_timeframes: list[ETimeFrames],
+    selected_scopes: list[EScope],
+    agg_method: PortfolioAggregationMethod,
+    grouping: list[str],
+):
+    """
+    Run grouped temperature score calculation for heatmap visualization.
+    
+    Returns:
+        (grouped_portfolio, grouped_aggregations)
+    """
+    temperature_score = TemperatureScore(
+        time_frames=selected_timeframes,
+        scopes=selected_scopes,
+        aggregation_method=agg_method,
+        grouping=grouping,
+    )
+    grouped_portfolio = temperature_score.calculate(
+        data_providers=[provider],
+        portfolio=companies
+    )
+    grouped_aggregations = temperature_score.aggregate_scores(grouped_portfolio)
+    
+    return grouped_portfolio, grouped_aggregations
